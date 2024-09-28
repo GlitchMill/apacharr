@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 import random
 from flask import send_from_directory
 from fpdf import FPDF
+from io import BytesIO
 
 load_dotenv()
 
@@ -18,9 +19,9 @@ ALLOWED_EXTENSIONS = {'xlsx'}
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def check_excel_format(file_path):
+def check_excel_format(file):
     try:
-        workbook = openpyxl.load_workbook(file_path)
+        workbook = openpyxl.load_workbook(file)
         sheet = workbook.active
         headers = [cell.value for cell in sheet[1]]
 
@@ -30,8 +31,8 @@ def check_excel_format(file_path):
         print(f"Error: {e}")
         return False
 
-def get_question_types(file_path):
-    workbook = openpyxl.load_workbook(file_path)
+def get_question_types(file):
+    workbook = openpyxl.load_workbook(file)
     sheet = workbook.active
     question_types = {}
 
@@ -41,8 +42,8 @@ def get_question_types(file_path):
 
     return question_types
 
-def generate_question_paper(file_path, request_data):
-    workbook = openpyxl.load_workbook(file_path)
+def generate_question_paper(file, request_data):
+    workbook = openpyxl.load_workbook(file)
     sheet = workbook.active
 
     questions = {row[3]: [] for row in sheet.iter_rows(min_row=2, values_only=True)}
@@ -61,7 +62,6 @@ def generate_question_paper(file_path, request_data):
 def index():
     return render_template('index.html')
 
-# Add this function to create a PDF
 def create_pdf(questions, output_filename):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
@@ -91,11 +91,11 @@ def upload_file():
         return redirect(request.url)
 
     if file and allowed_file(file.filename):
-        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
-        file.save(file_path)
+        # Use BytesIO to read the file directly without saving
+        file_stream = BytesIO(file.read())
 
-        if check_excel_format(file_path):
-            question_types = get_question_types(file_path)
+        if check_excel_format(file_stream):
+            question_types = get_question_types(file_stream)
             return render_template('question_selection.html', question_types=question_types)
         else:
             flash('File uploaded but does not match the expected format.')
@@ -108,7 +108,7 @@ def upload_file():
 def generate():
     file_path = request.form['file_path']
     selected_questions = []
-    
+
     for q_type in request.form:
         if q_type.endswith('_count'):
             count = int(request.form[q_type])  # Extract the number of questions
@@ -122,12 +122,9 @@ def generate():
     # Return the PDF file as an attachment
     return send_from_directory(UPLOAD_FOLDER, 'question_paper.pdf', as_attachment=True)
 
-
-
 @app.route('/uploads/<path:filename>')
 def serve_uploaded_file(filename):
     return send_from_directory(UPLOAD_FOLDER, filename)
-
 
 if __name__ == '__main__':
     app.run(debug=True)
