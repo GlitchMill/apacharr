@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Select Questions</title>
+</head>
+<body>
+    <h1>Select Number of Questions for Each Type</h1>
+    <form action="/generate" method="post">
+        <input type="hidden" name="file_path" value="{{ request.files['file'].filename }}">
+        {% for q_type, count in question_types.items() %}
+            <label>{{ q_type }} (Max: {{ count }}):</label>
+            <input type="number" name="{{ q_type }}_count" min="0" max="{{ count }}" value="0">
+            <br>
+        {% endfor %}
+        <button type="submit">Generate Question Paper</button>
+    </form>
+    <a href="/">Go Back</a>
+</body>
+</html>

@@ -1,6 +1,5 @@
-Sure! Here’s the README content without the code formatting:
 
-# Question Paper Generator
+# Acharr
 
 This Python application generates a question paper from an Excel file containing questions and their details. The questions are randomly selected based on a unique selection process, and the final question paper is saved as a PDF.
 
@@ -20,7 +19,7 @@ pip install openpyxl reportlab
 
 To run the application, use the following command in your terminal:
 
-python your_script.py path/to/your_file.xlsx --num_questions <number_of_questions>
+python app.py path/to/your_file.xlsx --num_questions <number_of_questions>
 
 - `path/to/your_file.xlsx`: The path to the Excel file containing the questions.
 - `--num_questions <number_of_questions>`: (Optional) The number of questions to include in the question paper (default is 5).
@@ -35,13 +34,13 @@ This command will generate a question paper with 10 questions from the `question
 
 The Excel file should contain the following columns:
 
-| Unit        | Questions                                | Marks | Type of Question | Probability of the Question coming |
-|-------------|------------------------------------------|-------|------------------|------------------------------------|
+| Unit        | Questions                               | Marks | Type of Question | Probability of the Question coming |
+| ----------- | --------------------------------------- | ----- | ---------------- | ---------------------------------- |
 | Mathematics | What is the derivative of x^2?          | 5     | Short Answer     | 0.2                                |
 | Physics     | Explain Newton's second law of motion.  | 10    | Essay            | 0.15                               |
 | Chemistry   | What is the chemical formula for water? | 3     | MCQ              | 0.25                               |
-| Biology     | Describe the process of photosynthesis.  | 8     | Short Answer     | 0.1                                |
-| ...         | ...                                      | ...   | ...              | ...                                |
+| Biology     | Describe the process of photosynthesis. | 8     | Short Answer     | 0.1                                |
+| ...         | ...                                     | ...   | ...              | ...                                |
 
 ## Output
 

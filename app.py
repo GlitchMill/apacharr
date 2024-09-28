@@ -1,54 +1,132 @@
+from flask import Flask, render_template, request, redirect, url_for, flash
 import openpyxl
-import secrets
-import argparse
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+import os
+from dotenv import load_dotenv
+import random
+from flask import send_from_directory
+from fpdf import FPDF
 
-# Function to create a question paper with unique questions
-def create_question_paper(questions, num_questions):
-    selected_questions = set()  # To keep track of selected questions
-    question_paper = []
+load_dotenv()
 
-    while len(question_paper) < num_questions:
-        question = secrets.choice(questions)
-        if question not in selected_questions:
-            selected_questions.add(question)
-            question_paper.append(question)
+app = Flask(__name__)
+app.secret_key = os.getenv('SECRET_KEY')
+UPLOAD_FOLDER = 'uploads'
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
-    return question_paper
+ALLOWED_EXTENSIONS = {'xlsx'}
 
-# Function to write the question paper to a PDF
-def write_to_pdf(question_paper, filename='question_paper.pdf'):
-    c = canvas.Canvas(filename, pagesize=letter)
-    c.drawString(100, 750, "Question Paper")
-    
-    for idx, question in enumerate(question_paper, start=1):
-        c.drawString(100, 750 - idx * 20, f"{idx}. {question[1]} (Marks: {question[2]}, Type: {question[3]})")
+def allowed_file(filename):
+    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-    c.save()
+def check_excel_format(file_path):
+    try:
+        workbook = openpyxl.load_workbook(file_path)
+        sheet = workbook.active
+        headers = [cell.value for cell in sheet[1]]
 
-def main(excel_file, num_questions):
-    # Load the workbook and select the active worksheet
-    workbook = openpyxl.load_workbook(excel_file)
+        expected_headers = ['Unit', 'Questions', 'Marks', 'Type of Question', 'Probability of the Question coming']
+        return headers == expected_headers
+    except Exception as e:
+        print(f"Error: {e}")
+        return False
+
+def get_question_types(file_path):
+    workbook = openpyxl.load_workbook(file_path)
+    sheet = workbook.active
+    question_types = {}
+
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        q_type = row[3]
+        question_types[q_type] = question_types.get(q_type, 0) + 1
+
+    return question_types
+
+def generate_question_paper(file_path, request_data):
+    workbook = openpyxl.load_workbook(file_path)
     sheet = workbook.active
 
-    # Extract data from the sheet into a list
-    data = [row for row in sheet.iter_rows(values_only=True)]
-    questions = data[1:]  # Get all questions, ignoring the header
+    questions = {row[3]: [] for row in sheet.iter_rows(min_row=2, values_only=True)}
+    for row in sheet.iter_rows(min_row=2, values_only=True):
+        questions[row[3]].append(row)
 
-    # Generate the question paper
-    question_paper = create_question_paper(questions, num_questions)
+    selected_questions = []
+    for q_type, num_questions in request_data.items():
+        num_questions = int(num_questions)
+        if num_questions > 0 and q_type in questions:
+            selected_questions.extend(random.sample(questions[q_type], min(num_questions, len(questions[q_type]))))
 
-    # Write the question paper to a PDF
-    write_to_pdf(question_paper)
+    return selected_questions
 
-    print("Question paper created and saved as 'question_paper.pdf'.")
+@app.route('/')
+def index():
+    return render_template('index.html')
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Generate a question paper from an Excel file.")
-    parser.add_argument("excel_file", type=str, help="Path to the Excel file (.xlsx)")
-    parser.add_argument("--num_questions", type=int, default=5, help="Number of questions to include in the question paper")
+# Add this function to create a PDF
+def create_pdf(questions, output_filename):
+    pdf = FPDF()
+    pdf.set_auto_page_break(auto=True, margin=15)
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+
+    for unit, question, marks, q_type, probability in questions:
+        pdf.cell(200, 10, txt=f"Unit: {unit}", ln=True)
+        pdf.cell(200, 10, txt=f"Question: {question}", ln=True)
+        pdf.cell(200, 10, txt=f"Marks: {marks}", ln=True)
+        pdf.cell(200, 10, txt=f"Type: {q_type}", ln=True)
+        pdf.cell(200, 10, txt=f"Probability: {probability}", ln=True)
+        pdf.cell(200, 10, txt="", ln=True)  # Add a blank line between questions
+
+    pdf.output(output_filename)
+
+@app.route('/upload', methods=['POST'])
+def upload_file():
+    if 'file' not in request.files:
+        flash('No file part')
+        return redirect(request.url)
+
+    file = request.files['file']
+
+    if file.filename == '':
+        flash('No selected file')
+        return redirect(request.url)
+
+    if file and allowed_file(file.filename):
+        file_path = os.path.join(UPLOAD_FOLDER, file.filename)
+        file.save(file_path)
+
+        if check_excel_format(file_path):
+            question_types = get_question_types(file_path)
+            return render_template('question_selection.html', question_types=question_types)
+        else:
+            flash('File uploaded but does not match the expected format.')
+            return redirect(url_for('index'))
+
+    flash('Invalid file type. Please upload an .xlsx file.')
+    return redirect(request.url)
+
+@app.route('/generate', methods=['POST'])
+def generate():
+    file_path = request.form['file_path']
+    selected_questions = []
     
-    args = parser.parse_args()
-    
-    main(args.excel_file, args.num_questions)
+    for q_type in request.form:
+        if q_type.endswith('_count'):
+            count = int(request.form[q_type])  # Extract the number of questions
+            question_type = q_type[:-6]  # Remove '_count' from the end
+            selected_questions.extend(generate_question_paper(file_path, {question_type: count}))
+
+    # Create PDF with the selected questions
+    output_filename = os.path.join('uploads', 'question_paper.pdf')
+    create_pdf(selected_questions, output_filename)
+
+    flash('Question paper generated successfully! You can download it <a href="/uploads/question_paper.pdf">here</a>.')
+    return redirect(url_for('index'))
+
+
+@app.route('/uploads/<path:filename>')
+def serve_uploaded_file(filename):
+    return send_from_directory(UPLOAD_FOLDER, filename)
+
+
+if __name__ == '__main__':
+    app.run(debug=True)

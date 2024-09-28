@@ -2,3 +2,5 @@
 questions.xlsx
 .~lock.questions.xlsx#
 *.pdf
+.env
+uploads/
