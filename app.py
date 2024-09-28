@@ -1,18 +1,16 @@
-from flask import Flask, render_template, request, redirect, url_for, flash
+from flask import Flask, render_template, request, redirect, url_for, flash, send_from_directory, Request, Response
 import openpyxl
 import os
 from dotenv import load_dotenv
 import random
-from flask import send_from_directory
 from fpdf import FPDF
 from io import BytesIO
+import tempfile
 
 load_dotenv()
 
 app = Flask(__name__)
 app.secret_key = os.getenv('SECRET_KEY')
-UPLOAD_FOLDER = 'uploads'
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 ALLOWED_EXTENSIONS = {'xlsx'}
 
@@ -58,11 +56,7 @@ def generate_question_paper(file, request_data):
 
     return selected_questions
 
-@app.route('/')
-def index():
-    return render_template('index.html')
-
-def create_pdf(questions, output_filename):
+def create_pdf(questions):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
@@ -76,7 +70,18 @@ def create_pdf(questions, output_filename):
         pdf.cell(200, 10, txt=f"Probability: {probability}", ln=True)
         pdf.cell(200, 10, txt="", ln=True)  # Add a blank line between questions
 
-    pdf.output(output_filename)
+    # Create a temporary file to hold the PDF data
+    with tempfile.NamedTemporaryFile(delete=True) as temp_pdf:
+        pdf.output(temp_pdf.name)  # Save to the temporary file
+        temp_pdf.seek(0)  # Rewind the file pointer to the beginning
+        pdf_output = temp_pdf.read()  # Read the content of the temporary file into memory
+
+    return pdf_output
+
+
+@app.route('/')
+def index():
+    return render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
@@ -108,23 +113,19 @@ def upload_file():
 def generate():
     file_path = request.form['file_path']
     selected_questions = []
-
+    
     for q_type in request.form:
         if q_type.endswith('_count'):
             count = int(request.form[q_type])  # Extract the number of questions
             question_type = q_type[:-6]  # Remove '_count' from the end
             selected_questions.extend(generate_question_paper(file_path, {question_type: count}))
 
-    # Create PDF with the selected questions
-    output_filename = os.path.join(UPLOAD_FOLDER, 'question_paper.pdf')
-    create_pdf(selected_questions, output_filename)
+    # Create PDF in memory with the selected questions
+    pdf_output = create_pdf(selected_questions)
 
     # Return the PDF file as an attachment
-    return send_from_directory(UPLOAD_FOLDER, 'question_paper.pdf', as_attachment=True)
+    return Response(pdf_output, mimetype='application/pdf', headers={"Content-Disposition": "attachment;filename=question_paper.pdf"})
 
-@app.route('/uploads/<path:filename>')
-def serve_uploaded_file(filename):
-    return send_from_directory(UPLOAD_FOLDER, filename)
 
 if __name__ == '__main__':
     app.run(debug=True)
