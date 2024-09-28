@@ -1,0 +1,4 @@
+.venv/
+questions.xlsx
+.~lock.questions.xlsx#
+*.pdf
