@@ -21,13 +21,16 @@ def check_excel_format(file):
     try:
         workbook = openpyxl.load_workbook(file)
         sheet = workbook.active
-        headers = [cell.value for cell in sheet[1]]
 
-        expected_headers = ['Unit', 'Questions', 'Marks', 'Type of Question', 'Probability of the Question coming']
+        # Filter out empty or None headers
+        headers = [str(cell.value).strip().lower() for cell in sheet[1] if cell.value is not None and cell.value.strip()]
+
+        expected_headers = ['unit', 'questions', 'marks', 'type of question', 'probability']
         return headers == expected_headers
     except Exception as e:
         print(f"Error: {e}")
         return False
+
 
 def get_question_types(file):
     workbook = openpyxl.load_workbook(file)
