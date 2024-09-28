@@ -116,11 +116,12 @@ def generate():
             selected_questions.extend(generate_question_paper(file_path, {question_type: count}))
 
     # Create PDF with the selected questions
-    output_filename = os.path.join('uploads', 'question_paper.pdf')
+    output_filename = os.path.join(UPLOAD_FOLDER, 'question_paper.pdf')
     create_pdf(selected_questions, output_filename)
 
-    flash('Question paper generated successfully! You can download it <a href="/uploads/question_paper.pdf">here</a>.')
-    return redirect(url_for('index'))
+    # Return the PDF file as an attachment
+    return send_from_directory(UPLOAD_FOLDER, 'question_paper.pdf', as_attachment=True)
+
 
 
 @app.route('/uploads/<path:filename>')
