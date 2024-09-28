@@ -57,31 +57,42 @@ def generate_question_paper(file, request_data):
 
     return selected_questions
 
-
 def create_pdf(questions):
     pdf = FPDF()
     pdf.set_auto_page_break(auto=True, margin=15)
     pdf.add_page()
     pdf.set_font("Arial", size=12)
 
+    # Group questions by type
+    grouped_questions = {}
     for row in questions:
         unit, question, marks, q_type, probability = row[:5]
+        if q_type not in grouped_questions:
+            grouped_questions[q_type] = []
+        grouped_questions[q_type].append((unit, question, marks))
 
-        pdf.cell(200, 10, txt=f"Unit: {unit}", ln=True)
-        pdf.cell(200, 10, txt=f"Question: {question}", ln=True)
-        pdf.cell(200, 10, txt=f"Marks: {marks}", ln=True)
-        pdf.cell(200, 10, txt=f"Type: {q_type}", ln=True)
-        pdf.cell(200, 10, txt=f"Probability: {probability}", ln=True)
-        pdf.cell(200, 10, txt="", ln=True)  # Add a blank line between questions
+    for q_type, q_list in grouped_questions.items():
+        total_marks = sum(int(marks) for _, _, marks in q_list)  # Calculate total marks
+        num_questions = len(q_list)
 
-    # Create a temporary file to store the PDF
-    with NamedTemporaryFile(delete=True) as tmp_file:
-        pdf.output(tmp_file.name)  # Write the PDF to the temporary file
-        tmp_file.seek(0)  # Move to the beginning of the file
-        pdf_output = BytesIO(tmp_file.read())  # Read the contents into a BytesIO object
+        # Add section header
+        pdf.cell(0, 10, txt=f"{q_type} - {total_marks} x {num_questions} = {total_marks}", ln=True)
+
+        # Add each question
+        for index, (unit, question, marks) in enumerate(q_list, start=1):
+            pdf.cell(0, 10, txt=f"{index}. {question} ({marks} marks)", ln=True)
+
+        pdf.cell(0, 10, txt="", ln=True)  # Add a blank line between question types
+
+    # Create a temporary file to hold the PDF data
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+        pdf.output(temp_pdf.name)  # Save PDF to temporary file
+        temp_pdf.seek(0)  # Move the cursor back to the beginning of the file
+
+        # Read the content into a BytesIO object
+        pdf_output = BytesIO(temp_pdf.read())
 
     return pdf_output
-
 
 @app.route('/')
 def index():
@@ -118,25 +129,31 @@ def upload_file():
 
 @app.route('/generate', methods=['POST'])
 def generate():
-    file_path = session.get('file_path')
-
-    if not file_path or not os.path.exists(file_path):
-        flash('File data not found. Please upload a file again.')
-        return redirect(url_for('index'))
-
     selected_questions = []
+    
+    # Get the file path from the session
+    file_path = session.get('file_path')
+    
+    if not file_path:
+        flash('No file found in session.')
+        return redirect(url_for('index'))
 
     for q_type in request.form:
         if q_type.endswith('_count'):
-            count = int(request.form[q_type])
-            question_type = q_type[:-6]
+            count = int(request.form[q_type])  # Extract the number of questions
+            question_type = q_type[:-6]  # Remove '_count' from the end
             selected_questions.extend(generate_question_paper(file_path, {question_type: count}))
 
-    # Create the PDF and get the BytesIO object
+    if not selected_questions:
+        flash('No questions selected. Please try again.')
+        return redirect(url_for('index'))
+
+    # Create PDF with the selected questions
     pdf_output = create_pdf(selected_questions)
 
-    # Send the PDF back to the user as an attachment
-    return send_file(pdf_output, mimetype='application/pdf', as_attachment=True, download_name="question_paper.pdf")
+    # Return the PDF file as an attachment
+    return send_file(pdf_output, mimetype='application/pdf', as_attachment=True, download_name='question_paper.pdf')
+
 
 if __name__ == '__main__':
     app.run(debug=True)
